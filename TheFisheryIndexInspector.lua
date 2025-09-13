@@ -1,4 +1,4 @@
--- ============= The Fishery Index Inspector by Molicha17 =============
+-- ============= The Fishery Index Inspector v1.0.1 by Molicha17 =============
 local Players            = game:GetService("Players")
 local UserInputService   = game:GetService("UserInputService")
 local Workspace          = game:GetService("Workspace")
@@ -60,6 +60,7 @@ panel.Parent = screen
 panel.Visible = false
 local menuVisible = false
 
+
 -- === Draggable Toggle Button (middle-right, debounced, draggable, clamped) ===
 local debounce = false
 
@@ -117,15 +118,6 @@ local function setBtnVisual(open)
 end
 
 setBtnVisual(false)
-
-local function setBtnVisual(open)
-    toggleBtn.BackgroundColor3 = open and Color3.fromRGB(70,70,70) or Color3.fromRGB(45,45,45)
-    if open then
-        toggleBtn.Text = "TFI\nON"
-    else
-        toggleBtn.Text = "TFI\nOFF"
-    end
-end
 
 local function toggleMenu()
 	if debounce then return end
@@ -294,6 +286,20 @@ local function makeTabButton(name, order)
     btn.TextXAlignment = Enum.TextXAlignment.Center
     btn.TextYAlignment = Enum.TextYAlignment.Center
 
+    -- Add inner padding for wrapped text
+    local pad = btn:FindFirstChild("Pad") or Instance.new("UIPadding")
+    pad.Name = "Pad"
+    local vpad = math.ceil(TAB_TEXT_SIZE * (TAB_VPAD_FACTOR * 0.5))
+    pad.PaddingTop    = UDim.new(0, vpad)
+    pad.PaddingBottom = UDim.new(0, vpad)
+    pad.PaddingLeft   = UDim.new(0, 8)
+    pad.PaddingRight  = UDim.new(0, 8)
+    pad.Parent = btn
+
+    -- Enforce a minimum height so long labels expand instead of truncating
+    btn.Size = UDim2.new(1, -12, 0, math.max(getTabButtonHeight(), btn.AbsoluteSize.Y))
+    btn.AutomaticSize = Enum.AutomaticSize.Y
+
     local corner = btn:FindFirstChildOfClass("UICorner") or Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
@@ -309,7 +315,6 @@ local fishSkinBtn = makeTabButton("Fish Skin Changer", 3)
 local skinView = mainArea:FindFirstChild("FishSkinView") or Instance.new("Frame")
 skinView.Name = "FishSkinView"
 skinView.BackgroundTransparency = 1
-skinvViewVisibleFix = false
 skinView.Visible = false
 skinView.Size = UDim2.fromScale(1,1)
 skinView.Parent = mainArea
@@ -341,7 +346,6 @@ iceToggle.AutoButtonColor = true
 local iceCorner = iceToggle:FindFirstChildOfClass("UICorner") or Instance.new("UICorner", iceToggle)
 iceCorner.CornerRadius = UDim.new(0,6)
 
--- Second toggle: disable Fish PointLights ("Fish is too bright")
 local lightToggle = skinView:FindFirstChild("LightToggle") or Instance.new("TextButton")
 lightToggle.Name = "LightToggle"
 lightToggle.Size = UDim2.fromOffset(260, 30)
@@ -353,16 +357,67 @@ lightToggle.AutoButtonColor = true
 local lightCorner = lightToggle:FindFirstChildOfClass("UICorner") or Instance.new("UICorner", lightToggle)
 lightCorner.CornerRadius = UDim.new(0,6)
 
+-- Third toggle: set Ice.OriginalTransparency = 1 ("Remove Frozen")
+local removeToggle = skinView:FindFirstChild("RemoveToggle") or Instance.new("TextButton")
+removeToggle.Name = "RemoveToggle"
+removeToggle.Size = UDim2.fromOffset(260, 30)
+removeToggle.Position = UDim2.fromOffset(0, 120)
+removeToggle.Text = "[ ] Remove Frozen"
+removeToggle.Parent = skinView
+styleTextLabel(removeToggle, BODY_FONT_SIZE, Color3.fromRGB(230,230,230))
+removeToggle.AutoButtonColor = true
+local removeCorner = removeToggle:FindFirstChildOfClass("UICorner") or Instance.new("UICorner", removeToggle)
+removeCorner.CornerRadius = UDim.new(0,6)
+
+-- Fourth toggle: disable Fire1 emission under Fish attachments ("Remove Atlantic")
+local atlanticToggle = skinView:FindFirstChild("AtlanticToggle") or Instance.new("TextButton")
+atlanticToggle.Name = "AtlanticToggle"
+atlanticToggle.Size = UDim2.fromOffset(260, 30)
+atlanticToggle.Position = UDim2.fromOffset(0, 160)
+atlanticToggle.Text = "[ ] Remove Atlantic"
+atlanticToggle.Parent = skinView
+styleTextLabel(atlanticToggle, BODY_FONT_SIZE, Color3.fromRGB(230,230,230))
+atlanticToggle.AutoButtonColor = true
+local atlCorner = atlanticToggle:FindFirstChildOfClass("UICorner") or Instance.new("UICorner", atlanticToggle)
+atlCorner.CornerRadius = UDim.new(0,6)
+
 -- Remember state on the view
 skinView:SetAttribute("IceOn", false)
 skinView:SetAttribute("LightsOff", false) -- when true, PointLights in Fish are disabled
+skinView:SetAttribute("RemoveFrozenOn", false)
+skinView:SetAttribute("RemoveAtlanticOn", false)
 
 local function applyIce(on)
 	for _, m in ipairs(Workspace:GetDescendants()) do
 		if m:IsA("Model") and m.Name == "Fish" then
 			local ice = m:FindFirstChild("Ice", true)
 			if ice and ice:IsA("BasePart") then
-				ice.Material = on and Enum.Material.Air or Enum.Material.Glass
+				if on then
+					ice.Material = Enum.Material.Air
+					-- If "Remove Frozen" is also on, that wins (sets to 1); otherwise 0.75
+					if skinView:GetAttribute("RemoveFrozenOn") then
+						ice:SetAttribute("OriginalTransparency", 1)
+					else
+						ice:SetAttribute("OriginalTransparency", 0.75)
+					end
+				else
+					ice.Material = Enum.Material.Glass
+					-- Only revert transparency if "Remove Frozen" is NOT active
+					if not skinView:GetAttribute("RemoveFrozenOn") then
+						ice:SetAttribute("OriginalTransparency", 0.5)
+					end
+				end
+			end
+		end
+	end
+end
+
+local function applyRemoveFrozen(on)
+	for _, m in ipairs(Workspace:GetDescendants()) do
+		if m:IsA("Model") and m.Name == "Fish" then
+			local ice = m:FindFirstChild("Ice", true)
+			if ice and ice:IsA("BasePart") then
+				ice:SetAttribute("OriginalTransparency", on and 1 or 0.5)
 			end
 		end
 	end
@@ -380,6 +435,24 @@ local function applyLights(off)
 	end
 end
 
+local function applyRemoveAtlantic(on)
+	for _, m in ipairs(Workspace:GetDescendants()) do
+		if m:IsA("Model") and m.Name == "Fish" then
+			for _, d in ipairs(m:GetDescendants()) do
+				if (d:IsA("ParticleEmitter") or d.ClassName == "Fire") and d.Name == "Fire1" then
+					if d:IsA("ParticleEmitter") then
+						d.Enabled = not on
+					else
+						-- Classic Fire fallback if present
+						d.Heat = on and 0 or 10
+						d.Size = on and 0 or 5
+					end
+				end
+			end
+		end
+	end
+end
+
 -- Auto-apply Ice material to newly loaded Fish/Ice when enabled
 local iceConns = {}
 
@@ -387,12 +460,31 @@ local function attachPerFishListener(fishModel)
 	-- Avoid duplicate listener on same model
 	if iceConns[fishModel] then return end
 	iceConns[fishModel] = fishModel.DescendantAdded:Connect(function(d)
-		if not (skinView:GetAttribute("IceOn") or skinView:GetAttribute("LightsOff")) then return end
+		if not (skinView:GetAttribute("IceOn")
+			or skinView:GetAttribute("LightsOff")
+			or skinView:GetAttribute("RemoveFrozenOn")
+			or skinView:GetAttribute("RemoveAtlanticOn")) then
+			return
+		end
 		if d then
-			if d:IsA("BasePart") and d.Name == "Ice" and skinView:GetAttribute("IceOn") then
-				d.Material = Enum.Material.Air
+			if d:IsA("BasePart") and d.Name == "Ice" then
+				if skinView:GetAttribute("RemoveFrozenOn") then
+					d:SetAttribute("OriginalTransparency", 1)
+				elseif skinView:GetAttribute("IceOn") then
+					d.Material = Enum.Material.Air
+					d:SetAttribute("OriginalTransparency", 0.75)
+				end
 			elseif d:IsA("PointLight") and skinView:GetAttribute("LightsOff") then
 				d.Enabled = false
+			end
+			if skinView:GetAttribute("RemoveAtlanticOn") then
+				if (d:IsA("ParticleEmitter") or d.ClassName == "Fire") and d.Name == "Fire1" then
+					if d:IsA("ParticleEmitter") then
+						d.Enabled = false
+					else
+						d.Heat = 0; d.Size = 0
+					end
+				end
 			end
 		end
 	end)
@@ -410,7 +502,12 @@ end
 local function attachWorkspaceListener()
 	if iceConns.workspace then return end
 	iceConns.workspace = Workspace.DescendantAdded:Connect(function(inst)
-		if not (skinView:GetAttribute("IceOn") or skinView:GetAttribute("LightsOff")) then return end
+		if not (skinView:GetAttribute("IceOn")
+			or skinView:GetAttribute("LightsOff")
+			or skinView:GetAttribute("RemoveFrozenOn")
+			or skinView:GetAttribute("RemoveAtlanticOn")) then
+			return
+		end
 		if inst then
 			-- New Fish model spawned
 			if inst:IsA("Model") and inst.Name == "Fish" then
@@ -419,6 +516,9 @@ local function attachWorkspaceListener()
 					local ice = inst:FindFirstChild("Ice", true)
 					if ice and ice:IsA("BasePart") then
 						ice.Material = Enum.Material.Air
+						if not skinView:GetAttribute("RemoveFrozenOn") then
+							ice:SetAttribute("OriginalTransparency", 0.75)
+						end
 					end
 				end
 				if skinView:GetAttribute("LightsOff") then
@@ -428,13 +528,41 @@ local function attachWorkspaceListener()
 						end
 					end
 				end
+				if skinView:GetAttribute("RemoveFrozenOn") then
+					local ice2 = inst:FindFirstChild("Ice", true)
+					if ice2 and ice2:IsA("BasePart") then
+						ice2:SetAttribute("OriginalTransparency", 1)
+					end
+				end
+				if skinView:GetAttribute("RemoveAtlanticOn") then
+					for _, d in ipairs(inst:GetDescendants()) do
+						if (d:IsA("ParticleEmitter") or d.ClassName == "Fire") and d.Name == "Fire1" then
+							if d:IsA("ParticleEmitter") then
+								d.Enabled = false
+							else
+								d.Heat = 0; d.Size = 0
+							end
+						end
+					end
+				end
 				attachPerFishListener(inst)
 			end
 			-- Ice or Light parts that appear later at workspace scope
 			if inst:IsA("BasePart") and inst.Name == "Ice" and skinView:GetAttribute("IceOn") then
 				inst.Material = Enum.Material.Air
+				if not skinView:GetAttribute("RemoveFrozenOn") then
+					inst:SetAttribute("OriginalTransparency", 0.75)
+				end
 			elseif inst:IsA("PointLight") and skinView:GetAttribute("LightsOff") then
 				inst.Enabled = false
+			elseif inst:IsA("BasePart") and inst.Name == "Ice" and skinView:GetAttribute("RemoveFrozenOn") then
+				inst:SetAttribute("OriginalTransparency", 1)
+			elseif (inst:IsA("ParticleEmitter") or inst.ClassName == "Fire") and inst.Name == "Fire1" and skinView:GetAttribute("RemoveAtlanticOn") then
+				if inst:IsA("ParticleEmitter") then
+					inst.Enabled = false
+				else
+					inst.Heat = 0; inst.Size = 0
+				end
 			end
 		end
 	end)
@@ -446,8 +574,12 @@ local function attachWorkspaceListener()
 	end
 end
 
+local detachAllIceListeners
 local function refreshSkinListeners()
-	local anyOn = (skinView:GetAttribute("IceOn") or false) or (skinView:GetAttribute("LightsOff") or false)
+	local anyOn = (skinView:GetAttribute("IceOn") or false)
+	or (skinView:GetAttribute("LightsOff") or false)
+	or (skinView:GetAttribute("RemoveFrozenOn") or false)
+	or (skinView:GetAttribute("RemoveAtlanticOn") or false)
 	if anyOn then
 		attachWorkspaceListener()
 	else
@@ -455,7 +587,7 @@ local function refreshSkinListeners()
 	end
 end
 
-local function detachAllIceListeners()
+function detachAllIceListeners()
 	for key, conn in pairs(iceConns) do
 		if typeof(conn) == "RBXScriptConnection" then
 			conn:Disconnect()
@@ -482,6 +614,22 @@ lightToggle.MouseButton1Click:Connect(function()
 	skinView:SetAttribute("LightsOff", off)
 	lightToggle.Text = off and "[✓] Fish is too bright" or "[ ] Fish is too bright"
 	applyLights(off)
+	refreshSkinListeners()
+end)
+
+removeToggle.MouseButton1Click:Connect(function()
+	local on = not (skinView:GetAttribute("RemoveFrozenOn") or false)
+	skinView:SetAttribute("RemoveFrozenOn", on)
+	removeToggle.Text = on and "[✓] Remove Frozen" or "[ ] Remove Frozen"
+	applyRemoveFrozen(on)
+	refreshSkinListeners()
+end)
+
+atlanticToggle.MouseButton1Click:Connect(function()
+	local on = not (skinView:GetAttribute("RemoveAtlanticOn") or false)
+	skinView:SetAttribute("RemoveAtlanticOn", on)
+	atlanticToggle.Text = on and "[✓] Remove Atlantic" or "[ ] Remove Atlantic"
+	applyRemoveAtlantic(on)
 	refreshSkinListeners()
 end)
 
@@ -630,13 +778,13 @@ mRefresh.MouseButton1Click:Connect(function()
 end)
 
 
-
 -- ===== Tab switching =====
 local function showOnly(view)
 	inspectorView.Visible = (view == inspectorView)
 	merchantView.Visible  = (view == merchantView)
 	skinView.Visible      = (view == skinView)
 end
+
 local function showInspector()
 	showOnly(inspectorView)
 	stopMerchantTicker()
@@ -650,10 +798,15 @@ end
 local function showSkin()
 	showOnly(skinView)
 	-- If any feature is enabled, ensure listeners active and re-apply
-	if skinView:GetAttribute("IceOn") or skinView:GetAttribute("LightsOff") then
+	if skinView:GetAttribute("IceOn")
+	   or skinView:GetAttribute("LightsOff")
+	   or skinView:GetAttribute("RemoveFrozenOn")
+	   or skinView:GetAttribute("RemoveAtlanticOn") then
 		attachWorkspaceListener()
 		if skinView:GetAttribute("IceOn") then applyIce(true) end
 		if skinView:GetAttribute("LightsOff") then applyLights(true) end
+		if skinView:GetAttribute("RemoveFrozenOn") then applyRemoveFrozen(true) end
+		if skinView:GetAttribute("RemoveAtlanticOn") then applyRemoveAtlantic(true) end
 	end
 end
 
